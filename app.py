@@ -10,6 +10,12 @@ MODEL_PATH = "models/resnet50_binary.pth"
 
 app = Flask(__name__)
 
+# Load model once at startup
+device = torch.device("cpu")
+model = build_model().to(device)
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+model.eval()
+
 transform = transforms.Compose([
     transforms.Resize(256),
     transforms.CenterCrop(224),
@@ -51,17 +57,16 @@ def predict():
     file = request.files["file"]
     img = Image.open(io.BytesIO(file.read())).convert("RGB")
 
-    device = torch.device("cpu")
-    model = build_model().to(device)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    model.eval()
-
+    # Preprocess image
     x = transform(img).unsqueeze(0).to(device)
+
+    # Inference
     with torch.no_grad():
         out = model(x)
         probs = F.softmax(out, dim=1)
         conf, pred = torch.max(probs, 1)
 
+    # Confidence fallback
     if conf.item() < 0.55:
         return render_template_string(HTML, result="not recyclable (no)")
 
